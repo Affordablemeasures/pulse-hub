@@ -1,94 +1,662 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pulse Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body {
-            background-color: #000000;
-            color: #FFFFFF;
-        }
-        .container {
-            background-color: #000000;
-            border: 2px solid #00FF00;
-        }
-        h1 {
-            color: #FFFFFF;
-        }
-        button {
-            background-color: #00FF00;
-            color: #000000;
-        }
-        button:hover {
-            background-color: #00CC00;
-        }
-        #moduleContainer {
-            background-color: #1A1A1A;
-            border: 2px solid #00FF00;
-            margin-top: 20px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pulse Dashboard V1.2</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --panel: #151515;
+      --panel-2: #1d1d1d;
+      --border: #2a2a2a;
+      --text: #ffffff;
+      --muted: #b3b3b3;
+      --lime: #c4f000;
+      --amber: #f5b942;
+      --sky: #62b6ff;
+      --red: #ff6b6b;
+      --purple: #b388ff;
+      --shadow: 0 10px 24px rgba(0,0,0,0.28);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      background: #0a0a0a !important;
+      background-color: #0a0a0a !important;
+      color: #ffffff !important;
+      font-family: Arial, Helvetica, sans-serif !important;
+      min-height: 100%;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      padding: 0;
+    }
+
+    a { text-decoration: none; color: inherit; }
+
+    .page {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+      background: var(--bg);
+    }
+
+    /* ── HEADER ── */
+    .header {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+      padding: 24px;
+      display: grid;
+      gap: 18px;
+      margin-bottom: 16px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      color: var(--lime);
+      font-size: 12px;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 38px;
+      line-height: 1.05;
+      color: var(--text);
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin-top: 8px;
+      font-size: 15px;
+    }
+
+    /* ── USER PANEL ── */
+    .user-panel {
+      min-width: 260px;
+      background: #111111;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 14px 16px;
+    }
+
+    .user-label {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      margin-bottom: 8px;
+    }
+
+    .user-name {
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+
+    .user-meta {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    /* ── ACTION BUTTONS ── */
+    .actions {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(120px, 1fr));
+      gap: 10px;
+    }
+
+    .action-btn {
+      display: block;
+      border: 0;
+      border-radius: 18px;
+      padding: 15px 12px;
+      font-weight: 800;
+      font-size: 14px;
+      font-family: Arial, Helvetica, sans-serif;
+      cursor: pointer;
+      text-align: center;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+      min-height: 54px;
+      text-decoration: none;
+      line-height: 1.3;
+    }
+
+    .action-btn:hover {
+      transform: translateY(-2px);
+      opacity: 0.92;
+    }
+
+    .btn-lime   { background: #c4f000 !important; color: #111111 !important; }
+    .btn-sky    { background: #62b6ff !important; color: #111111 !important; }
+    .btn-amber  { background: #f5b942 !important; color: #111111 !important; }
+    .btn-purple { background: #b388ff !important; color: #111111 !important; }
+
+    /* ── STAT TILES ── */
+    .section-grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+
+    .tile {
+      padding: 18px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .tile-title {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .tile-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .tile-value {
+      font-size: 34px;
+      font-weight: 800;
+      color: var(--text);
+    }
+
+    .pill {
+      display: inline-block;
+      font-size: 12px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: var(--panel-2);
+      color: var(--lime);
+      white-space: nowrap;
+    }
+
+    /* ── LAYOUT GRIDS ── */
+    .section-grid-3 {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .section-grid-3b {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .section-grid-2 {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }
+
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+
+    .card-title {
+      margin: 0;
+      font-size: 24px;
+      color: var(--text);
+    }
+
+    .card-link {
+      color: var(--lime);
+      font-size: 14px;
+      font-weight: 700;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: Arial, Helvetica, sans-serif;
+      text-decoration: none;
+    }
+
+    /* ── TABLE ── */
+    .table-wrap {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+      background: #111111;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead th {
+      text-align: left;
+      color: #dddddd;
+      background: #232323;
+      font-size: 13px;
+      padding: 13px 14px;
+    }
+
+    tbody td {
+      padding: 13px 14px;
+      border-top: 1px solid var(--border);
+      font-size: 14px;
+      color: var(--text);
+    }
+
+    .muted { color: var(--muted); }
+
+    /* ── STACK / MINI CARDS ── */
+    .stack { display: grid; gap: 10px; }
+
+    .mini-card {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: #111111;
+      padding: 14px;
+      color: var(--text);
+    }
+
+    .mini-title {
+      font-weight: 700;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+
+    /* ── COLOURED PILLS ── */
+    .tag-amber  { background: rgba(245,185,66,0.15);  color: #f5b942; }
+    .tag-sky    { background: rgba(98,182,255,0.15);  color: #62b6ff; }
+    .tag-red    { background: rgba(255,107,107,0.15); color: #ff6b6b; }
+    .tag-purple { background: rgba(179,136,255,0.15); color: #b388ff; }
+
+    /* ── NOTICE BOARD ── */
+    .notice-item {
+      border-left: 4px solid var(--lime);
+      padding: 12px 12px 12px 14px;
+      background: #111111;
+      border-radius: 14px;
+      border-top: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .notice-item.red   { border-left-color: #ff6b6b; }
+    .notice-item.amber { border-left-color: #f5b942; }
+    .notice-item.sky   { border-left-color: #62b6ff; }
+
+    .notice-title {
+      font-weight: 700;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+
+    /* ── STAFF GRID ── */
+    .staff-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .staff-card {
+      background: #111111;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+    }
+
+    .staff-name {
+      font-weight: 800;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+
+    /* ── QUICK LINKS ── */
+    .quick-links {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .quick-link {
+      display: block;
+      background: #111111;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      font-weight: 700;
+      color: #ffffff;
+      text-decoration: none;
+      transition: border-color 0.15s;
+      cursor: pointer;
+    }
+
+    .quick-link:hover { border-color: var(--lime); }
+
+    .quick-link span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 5px;
+      font-weight: 400;
+    }
+
+    /* ── FOOTER ── */
+    .footer-bar {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+      margin-top: 0;
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 1100px) {
+      .section-grid-4  { grid-template-columns: repeat(2, 1fr); }
+      .section-grid-3  { grid-template-columns: 1fr; }
+      .section-grid-3b { grid-template-columns: 1fr; }
+      .section-grid-2  { grid-template-columns: 1fr; }
+      .actions         { grid-template-columns: repeat(2, 1fr); }
+      .quick-links     { grid-template-columns: 1fr 1fr; }
+      .staff-grid      { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .page        { padding: 12px; }
+      h1           { font-size: 28px; }
+      .section-grid-4 { grid-template-columns: 1fr; }
+      .actions     { grid-template-columns: 1fr 1fr; }
+      .tile-value  { font-size: 30px; }
+      .card-title  { font-size: 20px; }
+      .quick-links { grid-template-columns: 1fr; }
+      .staff-grid  { grid-template-columns: 1fr; }
+      .topbar      { flex-direction: column; }
+      .user-panel  { width: 100%; }
+      thead        { display: none; }
+      table, tbody, tr, td { display: block; width: 100%; }
+      tbody td     { border-top: none; padding: 8px 14px; }
+      tbody tr     { border-top: 1px solid var(--border); padding: 8px 0; }
+    }
+  </style>
 </head>
-<body class="flex flex-col items-center justify-center min-h-screen">
-    <div class="container p-8 rounded-lg shadow-lg max-w-4xl w-full">
-        <h1 class="text-3xl font-bold mb-8 text-center">Pulse Dashboard</h1>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <button onclick="loadModule('plantation_shutter.html')" class="w-full px-4 py-2 rounded transition font-semibold">Plantation Shutter Quote Generator</button>
-            <button onclick="loadModule('curtain_track_quote.html')" class="w-full px-4 py-2 rounded transition font-semibold">Curtain & Track Quote Generator</button>
+<body>
+  <div class="page">
+
+    <!-- ── HEADER ── -->
+    <section class="header">
+      <div class="topbar">
+        <div>
+          <div class="brand">Affordable Curtains &amp; Blinds</div>
+          <h1>Pulse Dashboard</h1>
+          <div class="subtitle">Daily command screen for jobs, factory, installs, quotes, and cashflow.</div>
         </div>
-        <div id="moduleContainer" class="w-full h-[600px] hidden">
-            <iframe id="moduleIframe" src="" width="100%" height="100%" frameborder="0"></iframe>
+
+        <div class="user-panel">
+          <div class="user-label">Current User</div>
+          <div class="user-name">Stephen</div>
+          <div class="user-meta">Role: Owner / Manager<br>Mode: Full Access<br>Version: Pulse Dashboard V1.2</div>
         </div>
+      </div>
+
+      <div class="actions">
+        <button class="action-btn btn-lime"   onclick="openPlaceholder('New Job form')">New Job</button>
+        <button class="action-btn btn-lime"   onclick="openPlaceholder('Job Register')">Job Register</button>
+        <a      class="action-btn btn-sky"    href="https://calendar.google.com" target="_blank">Measure Mode</a>
+        <button class="action-btn btn-sky"    onclick="openPlaceholder('Quotes area')">Quotes</button>
+        <button class="action-btn btn-amber"  onclick="openPlaceholder('Factory Board')">Factory Board</button>
+        <button class="action-btn btn-amber"  onclick="openPlaceholder('Install Board')">Install Board</button>
+        <button class="action-btn btn-purple" onclick="openPlaceholder('CutWizard')">CutWizard</button>
+        <button class="action-btn btn-purple" onclick="openPlaceholder('Reports')">Reports</button>
+      </div>
+    </section>
+
+    <!-- ── STAT TILES ── -->
+    <section class="section-grid-4">
+      <div class="tile"><div class="tile-title">New Jobs</div><div class="tile-row"><div class="tile-value">6</div><span class="pill">Today</span></div></div>
+      <div class="tile"><div class="tile-title">Measures</div><div class="tile-row"><div class="tile-value">4</div><span class="pill">Booked</span></div></div>
+      <div class="tile"><div class="tile-title">Quotes Waiting</div><div class="tile-row"><div class="tile-value">5</div><span class="pill">Action needed</span></div></div>
+      <div class="tile"><div class="tile-title">Go-Aheads</div><div class="tile-row"><div class="tile-value">3</div><span class="pill">Ready to order</span></div></div>
+      <div class="tile"><div class="tile-title">Factory Queue</div><div class="tile-row"><div class="tile-value">7</div><span class="pill">Active jobs</span></div></div>
+      <div class="tile"><div class="tile-title">Ready Install</div><div class="tile-row"><div class="tile-value">4</div><span class="pill">To schedule</span></div></div>
+      <div class="tile"><div class="tile-title">Invoices Due</div><div class="tile-row"><div class="tile-value">$18.2k</div><span class="pill">Outstanding</span></div></div>
+      <div class="tile"><div class="tile-title">Stock Alerts</div><div class="tile-row"><div class="tile-value">3</div><span class="pill">Low fabrics</span></div></div>
+    </section>
+
+    <!-- ── TODAY'S MEASURES + URGENT ── -->
+    <section class="section-grid-3">
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">Today's Measures</h2>
+          <a class="card-link" href="https://calendar.google.com" target="_blank">Open Calendar</a>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Customer</th>
+                <th>Suburb</th>
+                <th>Staff</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>9:00</td><td>Jones</td><td class="muted">Riverside</td><td class="muted">Stephen</td></tr>
+              <tr><td>10:30</td><td>White</td><td class="muted">Legana</td><td class="muted">Wayne</td></tr>
+              <tr><td>2:00</td><td>Clark</td><td class="muted">Prospect</td><td class="muted">Marty</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">Urgent Tasks</h2>
+          <span class="pill tag-red">Action</span>
+        </div>
+        <div class="stack">
+          <div class="mini-card">Order Vibe Ice for 120326-4</div>
+          <div class="mini-card">Follow up quote for Brown job</div>
+          <div class="mini-card">Book install for White shutters</div>
+          <div class="mini-card">Check factory notes on Taylor rework</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── QUOTES / FACTORY / INSTALL ── -->
+    <section class="section-grid-3b">
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">Quotes Waiting</h2>
+          <button class="card-link" onclick="openPlaceholder('Quote Register')">Open Register</button>
+        </div>
+        <div class="stack">
+          <div class="mini-card">
+            <div class="mini-title">Smith</div>
+            <div class="muted">120326-1 • Howrah</div>
+            <div style="margin-top:8px"><span class="pill tag-amber">3 days</span></div>
+          </div>
+          <div class="mini-card">
+            <div class="mini-title">Brown</div>
+            <div class="muted">120326-2 • Riverside</div>
+            <div style="margin-top:8px"><span class="pill tag-amber">5 days</span></div>
+          </div>
+          <div class="mini-card">
+            <div class="mini-title">Wilson</div>
+            <div class="muted">120326-3 • Prospect</div>
+            <div style="margin-top:8px"><span class="pill tag-amber">2 days</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">Factory Queue</h2>
+          <button class="card-link" onclick="openPlaceholder('Factory Board')">Open Board</button>
+        </div>
+        <div class="stack">
+          <div class="mini-card">
+            <div class="mini-title">Jones</div>
+            <div class="muted">120325-4 • Vibe Coal</div>
+            <div style="margin-top:8px"><span class="pill tag-sky">Ready to Cut</span></div>
+          </div>
+          <div class="mini-card">
+            <div class="mini-title">Taylor</div>
+            <div class="muted">120325-5 • Vibe Ice</div>
+            <div style="margin-top:8px"><span class="pill tag-sky">Assembly</span></div>
+          </div>
+          <div class="mini-card">
+            <div class="mini-title">Evans</div>
+            <div class="muted">120325-6 • Vibe Stone</div>
+            <div style="margin-top:8px"><span class="pill tag-sky">QC</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">Ready for Install</h2>
+          <button class="card-link" onclick="openPlaceholder('Install Board')">Open Install Board</button>
+        </div>
+        <div class="stack">
+          <div class="mini-card">
+            <div class="mini-title">White</div>
+            <div class="muted">120324-7 • Kings Meadows</div>
+            <div style="margin-top:8px" class="muted">2-Man • High Fit</div>
+          </div>
+          <div class="mini-card">
+            <div class="mini-title">Adams</div>
+            <div class="muted">120324-8 • Riverside</div>
+            <div style="margin-top:8px" class="muted">Brick • Vacuum</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── NOTICE BOARD + STAFF ── -->
+    <section class="section-grid-2">
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">Notice Board</h2>
+          <button class="card-link" onclick="openPlaceholder('Staff Board')">Open Staff Board</button>
+        </div>
+        <div class="stack">
+          <div class="notice-item red">
+            <div class="notice-title">Install confirmations needed</div>
+            <div class="muted">Next week's peacock bookings need confirmation before colour change to installer calendar.</div>
+          </div>
+          <div class="notice-item amber">
+            <div class="notice-title">Factory stock check</div>
+            <div class="muted">Vibe Ice and chain stock to be reviewed before next go-ahead batch is processed.</div>
+          </div>
+          <div class="notice-item sky">
+            <div class="notice-title">Measure sheet update</div>
+            <div class="muted">New roller blind workflow will eventually feed directly into PulseRoller and CutWizard.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">Staff Dashboard</h2>
+          <span class="pill tag-purple">Live View</span>
+        </div>
+        <div class="staff-grid">
+          <div class="staff-card"><div class="staff-name">Wayne</div><div class="muted">2 jobs today<br>1 quote pending</div></div>
+          <div class="staff-card"><div class="staff-name">Marty</div><div class="muted">1 install today<br>Available PM</div></div>
+          <div class="staff-card"><div class="staff-name">Rachel</div><div class="muted">Quotes in progress<br>Office coverage</div></div>
+          <div class="staff-card"><div class="staff-name">Leonie</div><div class="muted">Backend access<br>Ordering and admin</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── QUICK LINKS + FUTURE MODULES ── -->
+    <section class="section-grid-2">
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">Quick Links</h2>
+          <span class="pill">Launchers</span>
+        </div>
+        <div class="quick-links">
+          <a class="quick-link" href="#" onclick="openPlaceholder('MYOB'); return false;">MYOB<span>Accounts and invoices</span></a>
+          <a class="quick-link" href="#" onclick="openPlaceholder('Google Drive'); return false;">Google Drive<span>Sheets, files, folders</span></a>
+          <a class="quick-link" href="#" onclick="openPlaceholder('Email'); return false;">Email<span>Outlook / inbox access</span></a>
+          <a class="quick-link" href="#" onclick="openPlaceholder('Measure Sheets'); return false;">Measure Sheets<span>Blank printable forms</span></a>
+          <a class="quick-link" href="#" onclick="openPlaceholder('Price Lists'); return false;">Price Lists<span>Live pricing references</span></a>
+          <a class="quick-link" href="#" onclick="openPlaceholder('Supplier Logins'); return false;">Supplier Logins<span>Fast supplier access</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">Future Modules</h2>
+          <span class="pill tag-purple">Pulse Build</span>
+        </div>
+        <div class="stack">
+          <div class="mini-card">PulseRoller</div>
+          <div class="mini-card">PulseShutter</div>
+          <div class="mini-card">CutWizard</div>
+          <div class="mini-card">Tools Register</div>
+          <div class="mini-card">Staff Whiteboard</div>
+          <div class="mini-card">Calendar Route Optimiser</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── FOOTER ── -->
+    <div class="footer-bar">
+      <div>Pulse Dashboard V1.2</div>
+      <div>Affordable Curtains &amp; Blinds • Lime / White / Charcoal Theme</div>
     </div>
 
-    <script>
-        function loadModule(url) {
-            const container = document.getElementById('moduleContainer');
-            const iframe = document.getElementById('moduleIframe');
-            iframe.src = url;
-            container.classList.remove('hidden');
-        }
-    </script>
+  </div><!-- /page -->
+
+  <script>
+    function openPlaceholder(name) {
+      alert(name + " is not linked yet. Next step is to connect this button to the real Pulse page, Google Sheet, Google Drive file, or HTML tool.");
+    }
+  </script>
 </body>
 </html>
